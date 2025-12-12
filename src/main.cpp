@@ -17,7 +17,8 @@ struct Settings
 const byte OC1A_PIN = 9;
 const byte SENSOR_PIN = 11;
 const byte BTN_PIN = 2;
-const word INTERVAL_UPDATES = 1000;
+const int INTERVAL_UPDATES = 1000;
+const int INIT_START_TIME = 7000;
 byte MIN_TEMP_START = 30; // default
 byte MAX_TEMP_START = 50; // default
 const byte MIN_CTR_TEMP = 20;
@@ -90,7 +91,7 @@ void loop()
     prevMillis = currentMillis;
     sensors.requestTemperatures();
     tempC = sensors.getTempCByIndex(0);
-    bool initMode = (currentMillis < 7000);
+    bool initMode = (currentMillis < INIT_START_TIME);
     if (!isValidTemp() || initMode)
     {
       initOrErrorMsgDisplay(initMode);
@@ -136,66 +137,44 @@ bool isValidTemp()
   return true;
 }
 
-void updateDisplay()
-{
+void updateDisplay() {
   lcd.clear();
-  if (isMenuShowing)
-  {
-    if (menuSelected == 0)
-    {
-      lcd.setCursor(0, 0);
-      lcd.write(0);
-    }
 
-    lcd.setCursor(1, 0);
-    lcd.print("Start Temp: ");
-    lcd.print(MIN_TEMP_START);
-    lcd.write((uint8_t)223);
-    lcd.print("C");
+  if (isMenuShowing) {
+    const char* labels[] = {"Start Temp: ", "End Temp: ", "Hysteresis: "};
+    const byte values[]  = {MIN_TEMP_START, MAX_TEMP_START, DUTY_HYST};
+    
+    for (byte i = 0; i < 3; i++) {
+      lcd.setCursor(1, i);
+      lcd.print(labels[i]);
+      lcd.print(values[i]);
+      lcd.write((uint8_t)223); // degree symbol
+      lcd.print("C");
 
-    if (menuSelected == 1)
-    {
-      lcd.setCursor(0, 1);
-      lcd.write(0);
+      if (menuSelected == i) {
+        lcd.setCursor(0, i);
+        lcd.write(0); // arrow
+      }
     }
-    lcd.setCursor(1, 1);
-    lcd.print("End Temp: ");
-    lcd.print(MAX_TEMP_START);
-    lcd.write((uint8_t)223);
-    lcd.print("C");
-
-    if (menuSelected == 2)
-    {
-      lcd.setCursor(0, 2);
-      lcd.write(0);
-    }
-    lcd.setCursor(1, 2);
-    // lcd.print("Backlight on: ");
-    // lcd.print(BACK_LIGHT_ON ? "Yes" : "No");
-    lcd.print("Hysteresis: ");
-    lcd.print(DUTY_HYST);
-    lcd.write((uint8_t)223);
-    lcd.print("C");
     lcd.setCursor(0, 3);
     lcd.print("Double click to exit");
-  }
-  else
-  {
+  } 
+  else {
     lcd.setCursor(0, 0);
     lcd.print("Temperature: ");
     lcd.print(round(tempC * 10.0) / 10.0, 1);
     lcd.write((uint8_t)223);
     lcd.print("C");
+
     lcd.setCursor(0, 1);
     lcd.print("Fans speed: ");
     lcd.setCursor(13, 1);
     lcd.print(adjustedDuty);
     lcd.print("%");
+
     lcd.setCursor(0, 2);
-    for (int i = 0; i < adjustedDuty / 5; i++)
-    {
-      lcd.print("*");
-    }
+    for (int i = 0; i < adjustedDuty / 5; i++) lcd.print("*");
+
     lcd.setCursor(0, 3);
     lcd.print("Double click to menu");
   }
