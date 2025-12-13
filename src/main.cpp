@@ -14,6 +14,13 @@ struct Settings
   byte lightOn;
 };
 
+enum ScreenMode
+{
+  SCREEN_MAIN,
+  SCREEN_MENU,
+  SCREEN_INIT
+};
+
 const byte OC1A_PIN = 9;
 const byte SENSOR_PIN = 11;
 const byte BTN_PIN = 2;
@@ -27,13 +34,16 @@ bool BACK_LIGHT_ON = true; // default
 byte DUTY_HYST = 3;        // default
 const word PWM_FREQ_HZ = 25000;
 const word TCNT1_TOP = 16000000 / (2 * PWM_FREQ_HZ);
+const byte LCD_ROWS = 4;
+const byte LCD_COLS = 20;
 unsigned long prevMillis = 0;
 byte lastDuty = 0;
 OneWire oneWire(SENSOR_PIN);
 DallasTemperature sensors(&oneWire);
-LiquidCrystal_I2C lcd(0x27, 20, 4);
+LiquidCrystal_I2C lcd(0x27, LCD_COLS, LCD_ROWS);
 GButton butt1(BTN_PIN);
 
+ScreenMode lastScreen = SCREEN_INIT;
 bool isMenuShowing = false;
 byte menuSelected = 0;
 float tempC = 0.0;
@@ -54,10 +64,12 @@ void setPwmDuty(byte duty);
 byte mapTemperatureToDuty();
 byte applyHysteresis(byte newDuty);
 bool isValidTemp();
-void updateDisplay();
+void updateDisplay(bool forceUpdate = false);
 void initOrErrorMsgDisplay(bool init);
 void buttonClickHandler();
-bool checkUnsavedDate();
+bool hasDigChanges(float data);
+bool hasProgBarChanges(int data);
+void clearRow(byte row);
 
 void setup()
 {
@@ -130,6 +142,7 @@ byte applyHysteresis(byte duty)
 
 bool isValidTemp()
 {
+
   if (tempC == DEVICE_DISCONNECTED_C)
     return false;
   if (isnan(tempC))
@@ -137,43 +150,59 @@ bool isValidTemp()
   return true;
 }
 
-void updateDisplay() {
-  lcd.clear();
+void updateDisplay(bool forceUpdate = false)
+{
+  ScreenMode currentScreen = isMenuShowing ? SCREEN_MENU : SCREEN_MAIN;
+  if (forceUpdate || lastScreen != currentScreen)
+  {
+    lcd.clear();
+    lastScreen = currentScreen;
+  }
 
-  if (isMenuShowing) {
-    const char* labels[] = {"Start Temp: ", "End Temp: ", "Hysteresis: "};
-    const byte values[]  = {MIN_TEMP_START, MAX_TEMP_START, DUTY_HYST};
-    
-    for (byte i = 0; i < 3; i++) {
+  if (isMenuShowing)
+  {
+    const char *labels[] = {"Start Temp: ", "End Temp: ", "Hysteresis: "};
+    const byte values[] = {MIN_TEMP_START, MAX_TEMP_START, DUTY_HYST};
+
+    for (byte i = 0; i < 3; i++)
+    {
       lcd.setCursor(1, i);
       lcd.print(labels[i]);
       lcd.print(values[i]);
       lcd.write((uint8_t)223); // degree symbol
       lcd.print("C");
 
-      if (menuSelected == i) {
+      if (menuSelected == i)
+      {
         lcd.setCursor(0, i);
         lcd.write(0); // arrow
       }
     }
     lcd.setCursor(0, 3);
     lcd.print("Double click to exit");
-  } 
-  else {
+  }
+  else
+  {
     lcd.setCursor(0, 0);
     lcd.print("Temperature: ");
     lcd.print(round(tempC * 10.0) / 10.0, 1);
     lcd.write((uint8_t)223);
     lcd.print("C");
 
+    if (hasDigChanges(adjustedDuty))
+      clearRow(1);
     lcd.setCursor(0, 1);
     lcd.print("Fans speed: ");
     lcd.setCursor(13, 1);
     lcd.print(adjustedDuty);
     lcd.print("%");
 
+    if (hasProgBarChanges(adjustedDuty))
+      clearRow(2);
+    
     lcd.setCursor(0, 2);
-    for (int i = 0; i < adjustedDuty / 5; i++) lcd.print("*");
+    for (int i = 0; i < adjustedDuty / 5; i++)
+      lcd.print("*");
 
     lcd.setCursor(0, 3);
     lcd.print("Double click to menu");
@@ -182,6 +211,7 @@ void updateDisplay() {
 
 void initOrErrorMsgDisplay(bool init)
 {
+  lastScreen = SCREEN_INIT;
   lcd.clear();
   byte idx = init ? 3 : 4;
   lcd.setCursor(idx, 1);
@@ -201,12 +231,12 @@ void buttonClickHandler()
       EEPROM.put(0, cfg);
     }
     isMenuShowing = !isMenuShowing;
-    updateDisplay();
+    updateDisplay(true);
   }
   if (butt1.isSingle() && isMenuShowing)
   {
     menuSelected = (menuSelected + 1) % 3;
-    updateDisplay();
+    updateDisplay(true);
   }
   if (butt1.isStep() && isMenuShowing)
   {
@@ -222,6 +252,32 @@ void buttonClickHandler()
       DUTY_HYST = (DUTY_HYST % 10) + 1;
       break;
     }
-    updateDisplay();
+    updateDisplay(true);
   }
+}
+
+bool hasDigChanges(float data)
+{
+  static int lastDigits = 1;
+  int n = abs(data);
+  byte digits = (n < 10) ? 1 : (n < 100) ? 2 : (n < 1000)  ? 3 : 4;
+  bool changed = (digits != lastDigits);
+  lastDigits = digits;
+  return changed;
+}
+
+bool hasProgBarChanges(int data)
+{
+  static int lastData = 0;
+  byte progBarData = data % 10;
+  bool changed = (lastData != progBarData);
+  lastData = progBarData;
+  return changed;
+}
+
+void clearRow(byte row)
+{
+  lcd.setCursor(0, row);
+  for (byte i = 0; i < LCD_COLS; i++)  
+    lcd.print(" ");
 }
