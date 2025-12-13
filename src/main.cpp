@@ -67,7 +67,9 @@ bool isValidTemp();
 void updateDisplay(bool forceUpdate = false);
 void initOrErrorMsgDisplay(bool init);
 void buttonClickHandler();
-bool hasDigChanges(float data);
+byte digitAmount(float data);
+bool hasTempChanges(float data);
+bool hasDutyChanges(float data);
 bool hasProgBarChanges(int data);
 void clearRow(byte row);
 
@@ -133,6 +135,8 @@ byte mapTemperatureToDuty()
 
 byte applyHysteresis(byte duty)
 {
+  if(duty == 100 || duty == 0)
+    return duty;
   if (abs((int)duty - (int)lastDuty) < DUTY_HYST)
     return lastDuty;
 
@@ -183,27 +187,28 @@ void updateDisplay(bool forceUpdate = false)
   }
   else
   {
+     if (hasTempChanges(tempC))
+      clearRow(0);
     lcd.setCursor(0, 0);
     lcd.print("Temperature: ");
     lcd.print(round(tempC * 10.0) / 10.0, 1);
     lcd.write((uint8_t)223);
     lcd.print("C");
-
-    if (hasDigChanges(adjustedDuty))
+    ///////////////////////////////////////////
+    if (hasDutyChanges(adjustedDuty))
       clearRow(1);
     lcd.setCursor(0, 1);
     lcd.print("Fans speed: ");
     lcd.setCursor(13, 1);
     lcd.print(adjustedDuty);
     lcd.print("%");
-
+    ///////////////////////////////////////////
     if (hasProgBarChanges(adjustedDuty))
       clearRow(2);
-    
     lcd.setCursor(0, 2);
     for (int i = 0; i < adjustedDuty / 5; i++)
       lcd.print("*");
-
+    ///////////////////////////////////////////
     lcd.setCursor(0, 3);
     lcd.print("Double click to menu");
   }
@@ -256,11 +261,31 @@ void buttonClickHandler()
   }
 }
 
-bool hasDigChanges(float data)
+byte digitAmount(float data)
+{
+  int n = abs(data);
+  if (n < 10)
+    return 1;
+  if (n < 100)
+    return 2;
+  if (n < 1000)
+    return 3;
+  return 4;
+}
+
+bool hasTempChanges(float data)
 {
   static int lastDigits = 1;
-  int n = abs(data);
-  byte digits = (n < 10) ? 1 : (n < 100) ? 2 : (n < 1000)  ? 3 : 4;
+  byte digits = digitAmount(data);
+  bool changed = (digits != lastDigits);
+  lastDigits = digits;
+  return changed;
+}
+
+bool hasDutyChanges(float data)
+{
+  static int lastDigits = 1;
+  byte digits = digitAmount(data);
   bool changed = (digits != lastDigits);
   lastDigits = digits;
   return changed;
