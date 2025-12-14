@@ -37,7 +37,6 @@ const word TCNT1_TOP = 16000000 / (2 * PWM_FREQ_HZ);
 const byte LCD_ROWS = 4;
 const byte LCD_COLS = 20;
 unsigned long prevMillis = 0;
-byte lastDuty = 0;
 OneWire oneWire(SENSOR_PIN);
 DallasTemperature sensors(&oneWire);
 LiquidCrystal_I2C lcd(0x27, LCD_COLS, LCD_ROWS);
@@ -60,6 +59,26 @@ byte arrowRight[8] = {
     B00000,
     B00000};
 
+byte arrowUp[8] = {
+    B00100,
+    B01110,
+    B10101,
+    B00100,
+    B00100,
+    B00100,
+    B00100,
+    B00000};
+
+byte arrowDown[8] = {
+    B00100,
+    B00100,
+    B00100,
+    B00100,
+    B10101,
+    B01110,
+    B00100,
+    B00000};
+
 void setPwmDuty(byte duty);
 byte mapTemperatureToDuty();
 byte applyHysteresis(byte newDuty);
@@ -72,6 +91,7 @@ bool hasTempChanges(float data);
 bool hasDutyChanges(float data);
 bool hasProgBarChanges(int data);
 void clearRow(byte row);
+void printDegreeC();
 
 void setup()
 {
@@ -93,7 +113,11 @@ void setup()
   lcd.init();
   if (BACK_LIGHT_ON)
     lcd.backlight();
-  lcd.createChar(0, arrowRight);
+  const byte *const symbols[] = {arrowRight, arrowUp, arrowDown};
+  for (byte i = 0; i < 3; i++)
+  {
+    lcd.createChar(i, (byte *)symbols[i]);
+  }
 }
 
 void loop()
@@ -135,7 +159,8 @@ byte mapTemperatureToDuty()
 
 byte applyHysteresis(byte duty)
 {
-  if(duty == 100 || duty == 0)
+  static byte lastDuty = 0;
+  if (duty == 100 || duty == 0)
     return duty;
   if (abs((int)duty - (int)lastDuty) < DUTY_HYST)
     return lastDuty;
@@ -157,6 +182,7 @@ bool isValidTemp()
 void updateDisplay(bool forceUpdate = false)
 {
   ScreenMode currentScreen = isMenuShowing ? SCREEN_MENU : SCREEN_MAIN;
+  static float previousTemp = 0;
   if (forceUpdate || lastScreen != currentScreen)
   {
     lcd.clear();
@@ -173,8 +199,7 @@ void updateDisplay(bool forceUpdate = false)
       lcd.setCursor(1, i);
       lcd.print(labels[i]);
       lcd.print(values[i]);
-      lcd.write((uint8_t)223); // degree symbol
-      lcd.print("C");
+      i == 2 ? (void)lcd.print("%") : printDegreeC();
 
       if (menuSelected == i)
       {
@@ -187,21 +212,33 @@ void updateDisplay(bool forceUpdate = false)
   }
   else
   {
-     if (hasTempChanges(tempC))
-      clearRow(0);
-    lcd.setCursor(0, 0);
-    lcd.print("Temperature: ");
-    lcd.print(round(tempC * 10.0) / 10.0, 1);
-    lcd.write((uint8_t)223);
-    lcd.print("C");
-    ///////////////////////////////////////////
-    if (hasDutyChanges(adjustedDuty))
-      clearRow(1);
-    lcd.setCursor(0, 1);
-    lcd.print("Fans speed: ");
-    lcd.setCursor(13, 1);
-    lcd.print(adjustedDuty);
-    lcd.print("%");
+    const char *labels[] = {"Temperature: ", "Fans speed: "};
+    const float values[] = {tempC, adjustedDuty};
+    for (byte i = 0; i < 2; i++)
+    {
+      if (i == 0)
+      {
+        if (hasTempChanges(values[i]))
+          clearRow(i);
+        lcd.setCursor(0, i);
+        lcd.print(labels[i]);
+        lcd.print(round(values[i] * 10.0) / 10.0, 1);
+        printDegreeC();
+        if (previousTemp != tempC)
+          previousTemp < tempC ? lcd.write(1) : lcd.write(2);
+        previousTemp = tempC;
+      }
+      else
+      {
+        if (hasDutyChanges(values[i]))
+          clearRow(i);
+        lcd.setCursor(0, i);
+        lcd.print(labels[i]);
+        lcd.print((byte)values[i]);
+        lcd.print("%");
+      }
+    }
+
     ///////////////////////////////////////////
     if (hasProgBarChanges(adjustedDuty))
       clearRow(2);
@@ -303,6 +340,12 @@ bool hasProgBarChanges(int data)
 void clearRow(byte row)
 {
   lcd.setCursor(0, row);
-  for (byte i = 0; i < LCD_COLS; i++)  
+  for (byte i = 0; i < LCD_COLS; i++)
     lcd.print(" ");
+}
+
+void printDegreeC()
+{
+  lcd.write((uint8_t)223);
+  lcd.print("C");
 }
