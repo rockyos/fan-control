@@ -5,6 +5,7 @@
 #include <LiquidCrystal_I2C.h>
 #include <GyverButton.h>
 #include <EEPROM.h>
+#include <PID_v1.h>
 
 struct Settings
 {
@@ -40,7 +41,7 @@ unsigned long prevMillis = 0;
 OneWire oneWire(SENSOR_PIN);
 DallasTemperature sensors(&oneWire);
 LiquidCrystal_I2C lcd(0x27, LCD_COLS, LCD_ROWS);
-GButton butt1(BTN_PIN);
+GButton btn(BTN_PIN);
 
 ScreenMode lastScreen = SCREEN_INIT;
 bool isMenuShowing = false;
@@ -48,6 +49,10 @@ byte menuSelected = 0;
 float tempC = 0.0;
 byte adjustedDuty = 0;
 Settings cfg;
+
+double Setpoint, Input, Output;
+double Kp = 2, Ki = 5, Kd = 1;
+PID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
 
 byte arrowRight[8] = {
     B00000,
@@ -118,6 +123,12 @@ void setup()
   {
     lcd.createChar(i, (byte *)symbols[i]);
   }
+
+  Setpoint = 25;
+
+  myPID.SetOutputLimits(0, 100);
+  myPID.SetSampleTime(INTERVAL_UPDATES);
+  myPID.SetMode(AUTOMATIC);
 }
 
 void loop()
@@ -129,6 +140,7 @@ void loop()
     prevMillis = currentMillis;
     sensors.requestTemperatures();
     tempC = sensors.getTempCByIndex(0);
+    Input = tempC;
     bool initMode = (currentMillis < INIT_START_TIME);
     if (!isValidTemp() || initMode)
     {
@@ -136,8 +148,11 @@ void loop()
       setPwmDuty(100);
       return;
     }
-    byte duty = mapTemperatureToDuty();
-    adjustedDuty = applyHysteresis(duty);
+    //  byte duty = mapTemperatureToDuty();
+    //  adjustedDuty = applyHysteresis(duty);
+    myPID.Compute();
+
+    adjustedDuty = (byte)Output;
     setPwmDuty(adjustedDuty);
     updateDisplay();
   }
@@ -264,8 +279,8 @@ void initOrErrorMsgDisplay(bool init)
 
 void buttonClickHandler()
 {
-  butt1.tick();
-  if (butt1.isDouble())
+  btn.tick();
+  if (btn.isDouble())
   {
     if (isMenuShowing)
     {
@@ -277,12 +292,12 @@ void buttonClickHandler()
     isMenuShowing = !isMenuShowing;
     updateDisplay(true);
   }
-  if (butt1.isSingle() && isMenuShowing)
+  if (btn.isSingle() && isMenuShowing)
   {
     menuSelected = (menuSelected + 1) % 3;
     updateDisplay(true);
   }
-  if (butt1.isStep() && isMenuShowing)
+  if (btn.isStep() && isMenuShowing)
   {
     switch (menuSelected)
     {
