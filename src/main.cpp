@@ -6,9 +6,12 @@
 #include <GyverButton.h>
 #include <EEPROM.h>
 #include <PID_v1.h>
+#define ARRAY_LEN(x) (sizeof(x) / sizeof((x)[0]))
 
 struct Settings
 {
+  bool isPIDmode;
+  byte ctrTemp;
   byte startTemp;
   byte endTemp;
   byte dutyHyst;
@@ -27,6 +30,8 @@ const byte SENSOR_PIN = 11;
 const byte BTN_PIN = 2;
 const int INTERVAL_UPDATES = 1000;
 const int INIT_START_TIME = 7000;
+bool IS_PID_MODE = false; // default
+double CTR_PID_TEMP = 50; // default
 byte MIN_TEMP_START = 30; // default
 byte MAX_TEMP_START = 50; // default
 const byte MIN_CTR_TEMP = 20;
@@ -50,9 +55,9 @@ float tempC = 0.0;
 byte adjustedDuty = 0;
 Settings cfg;
 
-double Setpoint, Input, Output;
+double inputPID, outputPID;
 double Kp = 2, Ki = 5, Kd = 1;
-PID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
+PID fanPID(&inputPID, &outputPID, &CTR_PID_TEMP, Kp, Ki, Kd, DIRECT);
 
 byte arrowRight[8] = {
     B00000,
@@ -101,6 +106,8 @@ void printDegreeC();
 void setup()
 {
   EEPROM.get(0, cfg);
+  IS_PID_MODE = cfg.isPIDmode != 255 ? (bool)cfg.isPIDmode : IS_PID_MODE;
+  CTR_PID_TEMP = cfg.ctrTemp != 255 ? cfg.ctrTemp : CTR_PID_TEMP;
   MIN_TEMP_START = cfg.startTemp != 255 ? cfg.startTemp : MIN_TEMP_START; // 255 default unprogrammed EEPROM value
   MAX_TEMP_START = cfg.endTemp != 255 ? cfg.endTemp : MAX_TEMP_START;
   DUTY_HYST = cfg.dutyHyst != 255 ? cfg.dutyHyst : DUTY_HYST;
@@ -115,6 +122,9 @@ void setup()
   sensors.begin();
   sensors.setWaitForConversion(false);
   sensors.setResolution(10);
+  fanPID.SetOutputLimits(0, 100);
+  fanPID.SetSampleTime(INTERVAL_UPDATES);
+  fanPID.SetMode(AUTOMATIC); /// check
   lcd.init();
   if (BACK_LIGHT_ON)
     lcd.backlight();
@@ -123,12 +133,6 @@ void setup()
   {
     lcd.createChar(i, (byte *)symbols[i]);
   }
-
-  Setpoint = 25;
-
-  myPID.SetOutputLimits(0, 100);
-  myPID.SetSampleTime(INTERVAL_UPDATES);
-  myPID.SetMode(AUTOMATIC);
 }
 
 void loop()
@@ -140,7 +144,7 @@ void loop()
     prevMillis = currentMillis;
     sensors.requestTemperatures();
     tempC = sensors.getTempCByIndex(0);
-    Input = tempC;
+    inputPID = tempC;
     bool initMode = (currentMillis < INIT_START_TIME);
     if (!isValidTemp() || initMode)
     {
@@ -148,11 +152,17 @@ void loop()
       setPwmDuty(100);
       return;
     }
-    //  byte duty = mapTemperatureToDuty();
-    //  adjustedDuty = applyHysteresis(duty);
-    myPID.Compute();
+    if (IS_PID_MODE)
+    {
+      fanPID.Compute();
+      adjustedDuty = (byte)outputPID;
+    }
+    else
+    {
+      byte duty = mapTemperatureToDuty();
+      adjustedDuty = applyHysteresis(duty);
+    }
 
-    adjustedDuty = (byte)Output;
     setPwmDuty(adjustedDuty);
     updateDisplay();
   }
@@ -186,7 +196,6 @@ byte applyHysteresis(byte duty)
 
 bool isValidTemp()
 {
-
   if (tempC == DEVICE_DISCONNECTED_C)
     return false;
   if (isnan(tempC))
@@ -206,15 +215,36 @@ void updateDisplay(bool forceUpdate = false)
 
   if (isMenuShowing)
   {
-    const char *labels[] = {"Start Temp: ", "End Temp: ", "Hysteresis: "};
-    const byte values[] = {MIN_TEMP_START, MAX_TEMP_START, DUTY_HYST};
+    const char **labels;
+    const byte *values;
+    byte labelsLength;
+    const char *labelsPIDon[] = {"PID enabled: ", "PID Temp:  "};
+    const byte valuesPIDon[] = {IS_PID_MODE, CTR_PID_TEMP};
+    const char *labelsPIDoff[] = {"PID enabled: ", "Start Temp: ", "End Temp: ", "Hysteresis: "};
+    const byte valuesPIDoff[] = {IS_PID_MODE, MIN_TEMP_START, MAX_TEMP_START, DUTY_HYST};
 
-    for (byte i = 0; i < 3; i++)
+    if (IS_PID_MODE)
+    {
+      labels = labelsPIDon;
+      values = valuesPIDon;
+      labelsLength = ARRAY_LEN(labelsPIDon);
+    }
+    else
+    {
+      labels = labelsPIDoff;
+      values = valuesPIDoff;
+      labelsLength = ARRAY_LEN(labelsPIDoff);
+    }
+    for (byte i = 0; i < labelsLength; i++)
     {
       lcd.setCursor(1, i);
       lcd.print(labels[i]);
-      lcd.print(values[i]);
-      i == 2 ? (void)lcd.print("%") : printDegreeC();
+      if (i == 0)
+        lcd.print(values[i] ? "Yes" : "No");
+      else
+        lcd.print(values[i]);
+      if (i > 0)
+        i == 3 ? (void)lcd.print("%") : printDegreeC();
 
       if (menuSelected == i)
       {
@@ -222,8 +252,8 @@ void updateDisplay(bool forceUpdate = false)
         lcd.write(0); // arrow
       }
     }
-    lcd.setCursor(0, 3);
-    lcd.print("Double click to exit");
+    // lcd.setCursor(0, 3);
+    // lcd.print("Double click to exit");
   }
   else
   {
@@ -284,6 +314,8 @@ void buttonClickHandler()
   {
     if (isMenuShowing)
     {
+      cfg.isPIDmode = IS_PID_MODE;
+      cfg.ctrTemp = CTR_PID_TEMP;
       cfg.startTemp = MIN_TEMP_START;
       cfg.endTemp = MAX_TEMP_START;
       cfg.dutyHyst = DUTY_HYST;
@@ -302,13 +334,29 @@ void buttonClickHandler()
     switch (menuSelected)
     {
     case 0:
-      MIN_TEMP_START = (MIN_TEMP_START + 1) < MAX_TEMP_START ? MIN_TEMP_START + 1 : MIN_CTR_TEMP;
+      IS_PID_MODE = !IS_PID_MODE;
       break;
     case 1:
-      MAX_TEMP_START = (MAX_TEMP_START + 1 > MAX_CTR_TEMP) ? MIN_TEMP_START + 1 : MAX_TEMP_START + 1;
+      if (IS_PID_MODE)
+      {
+        CTR_PID_TEMP = (CTR_PID_TEMP + 1) > MAX_CTR_TEMP ? MIN_CTR_TEMP : CTR_PID_TEMP + 1;
+      }
+      else
+        MIN_TEMP_START = (MIN_TEMP_START + 1) < MAX_TEMP_START ? MIN_TEMP_START + 1 : MIN_CTR_TEMP;
       break;
     case 2:
-      DUTY_HYST = (DUTY_HYST % 10) + 1;
+      if (IS_PID_MODE)
+      {
+      }
+      else
+        MAX_TEMP_START = (MAX_TEMP_START + 1 > MAX_CTR_TEMP) ? MIN_TEMP_START + 1 : MAX_TEMP_START + 1;
+      break;
+    case 3:
+      if (IS_PID_MODE)
+      {
+      }
+      else
+        DUTY_HYST = (DUTY_HYST % 10) + 1;
       break;
     }
     updateDisplay(true);
