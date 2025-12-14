@@ -226,6 +226,8 @@ void updateDisplay(bool forceUpdate = false)
         printDegreeC();
         if (previousTemp != tempC)
           previousTemp < tempC ? lcd.write(1) : lcd.write(2);
+        else
+          lcd.print(" ");
         previousTemp = tempC;
       }
       else
