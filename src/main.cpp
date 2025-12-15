@@ -79,6 +79,10 @@ const MenuItem menuPIDoff[] = {
     {"End Temp: ", &MAX_TEMP_START, TYPE_BYTE},
     {"Hysteresis: ", &DUTY_HYST, TYPE_BYTE}};
 
+const MenuItem mainView[] = {
+    {"Temperature: ", &tempC, TYPE_DOUBLE},
+    {"Fans speed: ", &adjustedDuty, TYPE_BYTE}};
+
 double inputPID, outputPID;
 double Kp = 2, Ki = 5, Kd = 1;
 PID fanPID(&inputPID, &outputPID, &CTR_PID_TEMP, Kp, Ki, Kd, DIRECT);
@@ -271,17 +275,17 @@ void updateDisplay(bool forceUpdate = false)
   }
   else
   {
-    const char *labels[] = {"Temperature: ", "Fans speed: "};
-    const float values[] = {tempC, adjustedDuty};
     for (byte i = 0; i < 2; i++)
     {
+
       if (i == 0)
       {
-        if (hasTempChanges(values[i]))
+        double val = *(double *)mainView[i].value;
+        if (hasTempChanges(val))
           clearRow(i);
         lcd.setCursor(0, i);
-        lcd.print(labels[i]);
-        lcd.print(round(values[i] * 10.0) / 10.0, 1);
+        lcd.print(mainView[i].label);
+        lcd.print(round(val * 10.0) / 10.0, 1);
         printDegreeC();
         if (previousTemp != tempC)
           previousTemp < tempC ? lcd.write(1) : lcd.write(2);
@@ -291,12 +295,15 @@ void updateDisplay(bool forceUpdate = false)
       }
       else
       {
-        if (hasDutyChanges(values[i]))
+        byte val = *(byte *)mainView[i].value;
+        if (hasDutyChanges(val))
           clearRow(i);
         lcd.setCursor(0, i);
-        lcd.print(labels[i]);
-        lcd.print((byte)values[i]);
+        lcd.print(mainView[i].label);
+        lcd.print(val);
         lcd.print("%");
+        lcd.setCursor(16, i);
+        lcd.print(IS_PID_MODE ? "-PID" : "-LIN");
       }
     }
 
@@ -349,7 +356,7 @@ void buttonClickHandler()
     switch (menuSelected)
     {
     case 0:
-        IS_PID_MODE = !IS_PID_MODE;
+      IS_PID_MODE = !IS_PID_MODE;
       break;
     case 1:
       if (IS_PID_MODE)
@@ -443,7 +450,7 @@ void printMenuValue(MenuItem menu)
     break;
 
   case TYPE_DOUBLE:
-    lcd.print((int)(*(double*)menu.value));
+    lcd.print((int)(*(double *)menu.value));
     break;
   }
 }
