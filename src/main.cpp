@@ -18,10 +18,18 @@ struct Settings
   byte lightOn;
 };
 
+enum ValueType
+{
+  TYPE_BOOL,
+  TYPE_BYTE,
+  TYPE_DOUBLE
+};
+
 struct MenuItem
 {
   const char *label;
-  byte value;
+  void *value;
+  ValueType type;
 };
 
 enum ScreenMode
@@ -62,14 +70,14 @@ byte adjustedDuty = 0;
 Settings cfg;
 
 const MenuItem menuPIDon[] = {
-    {"PID enabled: ", IS_PID_MODE},
-    {"PID Temp:  ", CTR_PID_TEMP}};
+    {"PID enabled: ", &IS_PID_MODE, TYPE_BOOL},
+    {"PID Temp: ", &CTR_PID_TEMP, TYPE_DOUBLE}};
 
 const MenuItem menuPIDoff[] = {
-    {"PID enabled: ", IS_PID_MODE},
-    {"Start Temp: ", MIN_TEMP_START},
-    {"End Temp: ", MAX_TEMP_START},
-    {"Hysteresis: ", DUTY_HYST}};
+    {"PID enabled: ", &IS_PID_MODE, TYPE_BOOL},
+    {"Start Temp: ", &MIN_TEMP_START, TYPE_BYTE},
+    {"End Temp: ", &MAX_TEMP_START, TYPE_BYTE},
+    {"Hysteresis: ", &DUTY_HYST, TYPE_BYTE}};
 
 double inputPID, outputPID;
 double Kp = 2, Ki = 5, Kd = 1;
@@ -118,6 +126,7 @@ bool hasDutyChanges(float data);
 bool hasProgBarChanges(int data);
 void clearRow(byte row);
 void printDegreeC();
+void printMenuValue(MenuItem menu);
 
 void setup()
 {
@@ -241,20 +250,16 @@ void updateDisplay(bool forceUpdate = false)
     }
     else
     {
-      menu = menuPIDon;
+      menu = menuPIDoff;
       menuSize = ARRAY_LEN(menuPIDoff);
     }
     for (byte i = 0; i < menuSize; i++)
     {
       lcd.setCursor(1, i);
       lcd.print(menu[i].label);
-      if (i == 0)
-        lcd.print(menu[i].value ? "No" : "Yes");
-      else
-        lcd.print(menu[i].value);
+      printMenuValue(menu[i]);
       if (i > 0)
         i == 3 ? (void)lcd.print("%") : printDegreeC();
-
       if (menuSelected == i)
       {
         lcd.setCursor(0, i);
@@ -335,7 +340,8 @@ void buttonClickHandler()
   }
   if (btn.isSingle() && isMenuShowing)
   {
-    menuSelected = (menuSelected + 1) % 3;
+    const byte menuSize = IS_PID_MODE ? ARRAY_LEN(menuPIDon) : ARRAY_LEN(menuPIDoff);
+    menuSelected = (menuSelected + 1) % menuSize;
     updateDisplay(true);
   }
   if (btn.isStep() && isMenuShowing)
@@ -343,7 +349,7 @@ void buttonClickHandler()
     switch (menuSelected)
     {
     case 0:
-      IS_PID_MODE = !IS_PID_MODE;
+        IS_PID_MODE = !IS_PID_MODE;
       break;
     case 1:
       if (IS_PID_MODE)
@@ -422,4 +428,22 @@ void printDegreeC()
 {
   lcd.write((uint8_t)223);
   lcd.print("C");
+}
+
+void printMenuValue(MenuItem menu)
+{
+  switch (menu.type)
+  {
+  case TYPE_BOOL:
+    lcd.print(*(bool *)menu.value ? "Yes" : "No");
+    break;
+
+  case TYPE_BYTE:
+    lcd.print(*(byte *)menu.value);
+    break;
+
+  case TYPE_DOUBLE:
+    lcd.print((int)(*(double*)menu.value));
+    break;
+  }
 }
