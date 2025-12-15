@@ -117,6 +117,26 @@ byte arrowDown[8] = {
     B00100,
     B00000};
 
+byte vertLine[8] = {
+    B00100,
+    B00100,
+    B00100,
+    B00100,
+    B00100,
+    B00100,
+    B00100,
+    B00100};
+
+byte vertBar[8] = {
+    B00100,
+    B00100,
+    B01110,
+    B01110,
+    B01110,
+    B01110,
+    B00100,
+    B00100};
+
 void setPwmDuty(byte duty);
 byte mapTemperatureToDuty();
 byte applyHysteresis(byte newDuty);
@@ -157,8 +177,8 @@ void setup()
   lcd.init();
   if (BACK_LIGHT_ON)
     lcd.backlight();
-  const byte *const symbols[] = {arrowRight, arrowUp, arrowDown};
-  for (byte i = 0; i < 3; i++)
+  const byte *const symbols[] = {arrowRight, arrowUp, arrowDown, vertLine, vertBar};
+  for (byte i = 0; i < ARRAY_LEN(symbols); i++)
   {
     lcd.createChar(i, (byte *)symbols[i]);
   }
@@ -268,6 +288,11 @@ void updateDisplay(bool forceUpdate = false)
       {
         lcd.setCursor(0, i);
         lcd.write(0); // arrow
+      }
+      if (menuSize >= LCD_ROWS)
+      {
+        lcd.setCursor(19, i);
+        menuSelected >= LCD_ROWS ? lcd.write(3) : lcd.write(4);
       }
     }
     // lcd.setCursor(0, 3);
