@@ -18,6 +18,12 @@ struct Settings
   byte lightOn;
 };
 
+struct MenuItem
+{
+  const char *label;
+  byte value;
+};
+
 enum ScreenMode
 {
   SCREEN_MAIN,
@@ -30,14 +36,14 @@ const byte SENSOR_PIN = 11;
 const byte BTN_PIN = 2;
 const int INTERVAL_UPDATES = 1000;
 const int INIT_START_TIME = 7000;
-bool IS_PID_MODE = false; // default
-double CTR_PID_TEMP = 50; // default
-byte MIN_TEMP_START = 30; // default
-byte MAX_TEMP_START = 50; // default
+bool IS_PID_MODE = false;
+double CTR_PID_TEMP = 50;
+byte MIN_TEMP_START = 30;
+byte MAX_TEMP_START = 50;
 const byte MIN_CTR_TEMP = 20;
 const byte MAX_CTR_TEMP = 80;
-bool BACK_LIGHT_ON = true; // default
-byte DUTY_HYST = 3;        // default
+bool BACK_LIGHT_ON = true;
+byte DUTY_HYST = 3;
 const word PWM_FREQ_HZ = 25000;
 const word TCNT1_TOP = 16000000 / (2 * PWM_FREQ_HZ);
 const byte LCD_ROWS = 4;
@@ -54,6 +60,16 @@ byte menuSelected = 0;
 float tempC = 0.0;
 byte adjustedDuty = 0;
 Settings cfg;
+
+const MenuItem menuPIDon[] = {
+    {"PID enabled: ", IS_PID_MODE},
+    {"PID Temp:  ", CTR_PID_TEMP}};
+
+const MenuItem menuPIDoff[] = {
+    {"PID enabled: ", IS_PID_MODE},
+    {"Start Temp: ", MIN_TEMP_START},
+    {"End Temp: ", MAX_TEMP_START},
+    {"Hysteresis: ", DUTY_HYST}};
 
 double inputPID, outputPID;
 double Kp = 2, Ki = 5, Kd = 1;
@@ -215,34 +231,27 @@ void updateDisplay(bool forceUpdate = false)
 
   if (isMenuShowing)
   {
-    const char **labels;
-    const byte *values;
-    byte labelsLength;
-    const char *labelsPIDon[] = {"PID enabled: ", "PID Temp:  "};
-    const byte valuesPIDon[] = {IS_PID_MODE, CTR_PID_TEMP};
-    const char *labelsPIDoff[] = {"PID enabled: ", "Start Temp: ", "End Temp: ", "Hysteresis: "};
-    const byte valuesPIDoff[] = {IS_PID_MODE, MIN_TEMP_START, MAX_TEMP_START, DUTY_HYST};
+    const MenuItem *menu;
+    byte menuSize;
 
     if (IS_PID_MODE)
     {
-      labels = labelsPIDon;
-      values = valuesPIDon;
-      labelsLength = ARRAY_LEN(labelsPIDon);
+      menu = menuPIDon;
+      menuSize = ARRAY_LEN(menuPIDon);
     }
     else
     {
-      labels = labelsPIDoff;
-      values = valuesPIDoff;
-      labelsLength = ARRAY_LEN(labelsPIDoff);
+      menu = menuPIDon;
+      menuSize = ARRAY_LEN(menuPIDoff);
     }
-    for (byte i = 0; i < labelsLength; i++)
+    for (byte i = 0; i < menuSize; i++)
     {
       lcd.setCursor(1, i);
-      lcd.print(labels[i]);
+      lcd.print(menu[i].label);
       if (i == 0)
-        lcd.print(values[i] ? "Yes" : "No");
+        lcd.print(menu[i].value ? "No" : "Yes");
       else
-        lcd.print(values[i]);
+        lcd.print(menu[i].value);
       if (i > 0)
         i == 3 ? (void)lcd.print("%") : printDegreeC();
 
