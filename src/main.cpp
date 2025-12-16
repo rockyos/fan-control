@@ -64,7 +64,8 @@ GButton btn(BTN_PIN);
 
 ScreenMode lastScreen = SCREEN_INIT;
 bool isMenuShowing = false;
-byte menuSelected = 0;
+byte rowSelected = 0;
+byte idxFirstRowMenuItem = 0;
 float tempC = 0.0;
 byte adjustedDuty = 0;
 Settings cfg;
@@ -279,24 +280,37 @@ void updateDisplay(bool forceUpdate = false)
     }
     for (byte i = 0; i < menuSize; i++)
     {
+      const byte allowToShowRows = LCD_ROWS - 1;
+      const byte idx = idxFirstRowMenuItem + i;
       lcd.setCursor(1, i);
-      lcd.print(menu[i].label);
-      printMenuValue(menu[i]);
-      if (i > 0)
-        i == 3 ? (void)lcd.print("%") : printDegreeC();
-      if (menuSelected == i)
+      lcd.print(menu[idx].label);
+      printMenuValue(menu[idx]);
+      // if (i > 0)
+      //   i == 3 ? (void)lcd.print("%") : printDegreeC();
+      if (rowSelected == i)
       {
         lcd.setCursor(0, i);
         lcd.write(0); // arrow
       }
-      if (menuSize >= LCD_ROWS)
+      if (menuSize >= allowToShowRows && i < allowToShowRows)
       {
         lcd.setCursor(19, i);
-        menuSelected >= LCD_ROWS ? lcd.write(3) : lcd.write(4);
+        switch (i)
+        {
+        case 0:
+          rowSelected == 0 ? lcd.write(4) : lcd.write(3);
+          break;
+        case 1:
+         rowSelected == 2 && idxFirstRowMenuItem < (menuSize - 1)  ? lcd.write(4) : lcd.write(3);
+          break;
+        case 2:
+          idxFirstRowMenuItem == (menuSize - 1) ? lcd.write(4) : lcd.write(3);
+          break;
+        }
       }
     }
-    // lcd.setCursor(0, 3);
-    // lcd.print("Double click to exit");
+    lcd.setCursor(0, 3);
+    lcd.print("Double click to exit");
   }
   else
   {
@@ -372,13 +386,32 @@ void buttonClickHandler()
   }
   if (btn.isSingle() && isMenuShowing)
   {
-    const byte menuSize = IS_PID_MODE ? ARRAY_LEN(menuPIDon) : ARRAY_LEN(menuPIDoff);
-    menuSelected = (menuSelected + 1) % menuSize;
+    const byte menuItems = IS_PID_MODE ? ARRAY_LEN(menuPIDon) : ARRAY_LEN(menuPIDoff);
+    const byte allowToShowRows = LCD_ROWS - 1;
+    const byte divider = menuItems <= allowToShowRows ? menuItems : allowToShowRows;
+
+    if (rowSelected == (allowToShowRows - 1) && menuItems > allowToShowRows)
+    {
+      if ((idxFirstRowMenuItem + allowToShowRows) < menuItems)
+      {
+        idxFirstRowMenuItem = idxFirstRowMenuItem + 1;
+      }
+      else
+      {
+        idxFirstRowMenuItem = 0;
+        rowSelected = 0;
+      }
+    }
+    else
+    {
+      rowSelected = (rowSelected + 1) % divider;
+    }
+
     updateDisplay(true);
   }
   if (btn.isStep() && isMenuShowing)
   {
-    switch (menuSelected)
+    switch (rowSelected)
     {
     case 0:
       IS_PID_MODE = !IS_PID_MODE;
