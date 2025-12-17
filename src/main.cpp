@@ -25,11 +25,19 @@ enum ValueType
   TYPE_DOUBLE
 };
 
+enum DisplaySignType
+{
+  TYPE_NONE,
+  TYPE_DEGREE,
+  TYPE_PERCENT,
+};
+
 struct MenuItem
 {
   const char *label;
   void *value;
   ValueType type;
+  DisplaySignType signType;
 };
 
 enum ScreenMode
@@ -71,19 +79,18 @@ byte adjustedDuty = 0;
 Settings cfg;
 
 const MenuItem menuPIDon[] = {
-    {"PID enabled: ", &IS_PID_MODE, TYPE_BOOL},
-    {"PID Temp: ", &CTR_PID_TEMP, TYPE_DOUBLE}};
+    {"PID enabled: ", &IS_PID_MODE, TYPE_BOOL, TYPE_NONE},
+    {"PID Temp: ", &CTR_PID_TEMP, TYPE_DOUBLE, TYPE_DEGREE}};
 
 const MenuItem menuPIDoff[] = {
-    {"PID enabled: ", &IS_PID_MODE, TYPE_BOOL},
-    {"Start Temp: ", &MIN_TEMP_START, TYPE_BYTE},
-    {"End Temp: ", &MAX_TEMP_START, TYPE_BYTE},
-    // {"Test Temp: ", &MAX_TEMP_START, TYPE_BYTE},
-    {"Hysteresis: ", &DUTY_HYST, TYPE_BYTE}};
+    {"PID enabled: ", &IS_PID_MODE, TYPE_BOOL, TYPE_NONE},
+    {"Start Temp: ", &MIN_TEMP_START, TYPE_BYTE, TYPE_DEGREE},
+    {"End Temp: ", &MAX_TEMP_START, TYPE_BYTE, TYPE_DEGREE},
+    {"Hysteresis: ", &DUTY_HYST, TYPE_BYTE, TYPE_PERCENT}};
 
 const MenuItem mainView[] = {
-    {"Temperature: ", &tempC, TYPE_DOUBLE},
-    {"Fans speed: ", &adjustedDuty, TYPE_BYTE}};
+    {"Temperature: ", &tempC, TYPE_DOUBLE, TYPE_DEGREE},
+    {"Fans speed: ", &adjustedDuty, TYPE_BYTE, TYPE_PERCENT}};
 
 double inputPID, outputPID;
 double Kp = 2, Ki = 5, Kd = 1;
@@ -151,8 +158,7 @@ bool hasTempChanges(float data);
 bool hasDutyChanges(float data);
 bool hasProgBarChanges(int data);
 void clearRow(byte row);
-void printDegreeC();
-void printMenuValue(MenuItem menu);
+void printValue(MenuItem menu);
 
 void setup()
 {
@@ -279,27 +285,25 @@ void updateDisplay(bool forceUpdate = false)
       menu = menuPIDoff;
       menuSize = ARRAY_LEN(menuPIDoff);
     }
-    for (byte i = 0; i < allowShowRows; i++)
+    for (byte i = 0; i < menuSize; i++)
     {
-
+      if (i > 2)
+        break; // Temporary crutch to show only 3 menu items
       const byte idx = idxFirstRowMenuItem + i;
       lcd.setCursor(1, i);
-      lcd.print(menu[idx].label);
-      printMenuValue(menu[idx]);
-      // if (i > 0)
-      //   i == 3 ? (void)lcd.print("%") : printDegreeC();
+      printValue(menu[idx]);
       if (rowSelected == i)
       {
         lcd.setCursor(0, i);
         lcd.write(0); // arrow
       }
-      if (menuSize >= allowShowRows && i < allowShowRows) //
+      if (menuSize >= allowShowRows && i < allowShowRows)
       {
         lcd.setCursor(19, i);
         if (i == 0)
           idxFirstRowMenuItem == 0 ? lcd.write(4) : lcd.write(3); // vertLine = 3, vertBar = 4
         else if (i == 1)
-          idxFirstRowMenuItem > 0 && (idxFirstRowMenuItem + allowShowRows) < menuSize ? lcd.write(4) : lcd.write(3); 
+          idxFirstRowMenuItem > 0 && (idxFirstRowMenuItem + allowShowRows) < menuSize ? lcd.write(4) : lcd.write(3);
         else if (i == 2)
           (idxFirstRowMenuItem + allowShowRows) < menuSize ? lcd.write(3) : lcd.write(4);
       }
@@ -318,9 +322,7 @@ void updateDisplay(bool forceUpdate = false)
         if (hasTempChanges(val))
           clearRow(i);
         lcd.setCursor(0, i);
-        lcd.print(mainView[i].label);
-        lcd.print(round(val * 10.0) / 10.0, 1);
-        printDegreeC();
+        printValue(mainView[i]);
         if (previousTemp != tempC)
           previousTemp < tempC ? lcd.write(1) : lcd.write(2);
         else
@@ -333,9 +335,7 @@ void updateDisplay(bool forceUpdate = false)
         if (hasDutyChanges(val))
           clearRow(i);
         lcd.setCursor(0, i);
-        lcd.print(mainView[i].label);
-        lcd.print(val);
-        lcd.print("%");
+        printValue(mainView[i]);
         lcd.setCursor(16, i);
         lcd.print(IS_PID_MODE ? "-PID" : "-LIN");
       }
@@ -484,14 +484,9 @@ void clearRow(byte row)
     lcd.print(" ");
 }
 
-void printDegreeC()
+void printValue(MenuItem menu)
 {
-  lcd.write((uint8_t)223);
-  lcd.print("C");
-}
-
-void printMenuValue(MenuItem menu)
-{
+  lcd.print(menu.label);
   switch (menu.type)
   {
   case TYPE_BOOL:
@@ -506,4 +501,12 @@ void printMenuValue(MenuItem menu)
     lcd.print((int)(*(double *)menu.value));
     break;
   }
+
+  if (menu.signType == TYPE_DEGREE)
+  {
+    lcd.write((uint8_t)223);
+    lcd.print("C");
+  }
+  else if (menu.signType == TYPE_PERCENT)
+    lcd.print("%");
 }
