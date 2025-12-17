@@ -316,7 +316,6 @@ void updateDisplay(bool forceUpdate = false)
   {
     for (byte i = 0; i < 2; i++)
     {
-
       if (i == 0)
       {
         double val = *(double *)mainView[i].value;
@@ -341,7 +340,6 @@ void updateDisplay(bool forceUpdate = false)
         lcd.print(IS_PID_MODE ? "-PID" : "-LIN");
       }
     }
-
     ///////////////////////////////////////////
     if (hasProgBarChanges(adjustedDuty))
       clearRow(2);
@@ -397,52 +395,19 @@ void buttonClickHandler()
       }
     }
     else
-    {
       rowSelected = (rowSelected + 1) % divider;
-    }
 
     updateDisplay(true);
   }
   if (btn.isStep() && isMenuShowing)
   {
     byte activeIndex = idxFirstRowMenuItem + rowSelected;
+
     if (IS_PID_MODE)
       stepMenuValue(menuPIDon[activeIndex]);
     else
       stepMenuValue(menuPIDoff[activeIndex]);
 
-    // switch (rowSelected)
-    // {
-    // case 0:
-    //   IS_PID_MODE = !IS_PID_MODE;
-    //   break;
-    // case 1:
-    //   if (IS_PID_MODE)
-    //   {
-    //     // CTR_PID_TEMP = (CTR_PID_TEMP + 1) > MAX_CTR_TEMP ? MIN_CTR_TEMP : CTR_PID_TEMP + 1;
-    //     stepMenuValue(menuPIDon[activeIndex]);
-    //   }
-    //   else
-    //     stepMenuValue(menuPIDoff[activeIndex]);
-    //   // MIN_TEMP_START = (MIN_TEMP_START + 1) < MAX_TEMP_START ? MIN_TEMP_START + 1 : MIN_CTR_TEMP;
-    //   break;
-    // case 2:
-    //   if (IS_PID_MODE)
-    //   {
-    //     stepMenuValue(menuPIDon[activeIndex]);
-    //   }
-    //   else
-    //     stepMenuValue(menuPIDoff[activeIndex]);
-    //   // MAX_TEMP_START = (MAX_TEMP_START + 1 > MAX_CTR_TEMP) ? MIN_TEMP_START + 1 : MAX_TEMP_START + 1;
-    //   break;
-    // case 3:
-    //   if (IS_PID_MODE)
-    //   {
-    //   }
-    //   else
-    //     DUTY_HYST = (DUTY_HYST % 10) + 1;
-    //   break;
-    // }
     updateDisplay(true);
   }
 }
@@ -546,7 +511,7 @@ void stepMenuValue(const MenuItem &item)
   case TYPE_DOUBLE:
   {
     double *v = (double *)item.value;
-    
+
     if (item.value == &CTR_PID_TEMP)
       *v = (*v + 1 > MAX_CTR_TEMP) ? MIN_CTR_TEMP : *v + 1;
 
