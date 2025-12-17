@@ -78,6 +78,7 @@ const MenuItem menuPIDoff[] = {
     {"PID enabled: ", &IS_PID_MODE, TYPE_BOOL},
     {"Start Temp: ", &MIN_TEMP_START, TYPE_BYTE},
     {"End Temp: ", &MAX_TEMP_START, TYPE_BYTE},
+    // {"Test Temp: ", &MAX_TEMP_START, TYPE_BYTE},
     {"Hysteresis: ", &DUTY_HYST, TYPE_BYTE}};
 
 const MenuItem mainView[] = {
@@ -267,7 +268,7 @@ void updateDisplay(bool forceUpdate = false)
   {
     const MenuItem *menu;
     byte menuSize;
-
+    const byte allowShowRows = LCD_ROWS - 1;
     if (IS_PID_MODE)
     {
       menu = menuPIDon;
@@ -278,9 +279,9 @@ void updateDisplay(bool forceUpdate = false)
       menu = menuPIDoff;
       menuSize = ARRAY_LEN(menuPIDoff);
     }
-    for (byte i = 0; i < menuSize; i++)
+    for (byte i = 0; i < allowShowRows; i++)
     {
-      const byte allowToShowRows = LCD_ROWS - 1;
+
       const byte idx = idxFirstRowMenuItem + i;
       lcd.setCursor(1, i);
       lcd.print(menu[idx].label);
@@ -292,21 +293,15 @@ void updateDisplay(bool forceUpdate = false)
         lcd.setCursor(0, i);
         lcd.write(0); // arrow
       }
-      if (menuSize >= allowToShowRows && i < allowToShowRows)
+      if (menuSize >= allowShowRows && i < allowShowRows) //
       {
         lcd.setCursor(19, i);
-        switch (i)
-        {
-        case 0:
-          rowSelected == 0 ? lcd.write(4) : lcd.write(3);
-          break;
-        case 1:
-         rowSelected == 2 && idxFirstRowMenuItem < (menuSize - 1)  ? lcd.write(4) : lcd.write(3);
-          break;
-        case 2:
-          idxFirstRowMenuItem == (menuSize - 1) ? lcd.write(4) : lcd.write(3);
-          break;
-        }
+        if (i == 0)
+          idxFirstRowMenuItem == 0 ? lcd.write(4) : lcd.write(3); // vertLine = 3, vertBar = 4
+        else if (i == 1)
+          idxFirstRowMenuItem > 0 && (idxFirstRowMenuItem + allowShowRows) < menuSize ? lcd.write(4) : lcd.write(3); 
+        else if (i == 2)
+          (idxFirstRowMenuItem + allowShowRows) < menuSize ? lcd.write(3) : lcd.write(4);
       }
     }
     lcd.setCursor(0, 3);
