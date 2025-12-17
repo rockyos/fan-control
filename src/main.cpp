@@ -60,8 +60,8 @@ const byte MIN_CTR_TEMP = 20;
 const byte MAX_CTR_TEMP = 80;
 bool BACK_LIGHT_ON = true;
 byte DUTY_HYST = 3;
-const word PWM_FREQ_HZ = 25000;
-const word TCNT1_TOP = 16000000 / (2 * PWM_FREQ_HZ);
+const word PWM_FREQ_HZ = 25000;                      // 25 kHz of fan PWM frequency
+const word TCNT1_TOP = 16000000 / (2 * PWM_FREQ_HZ); // CPU clock
 const byte LCD_ROWS = 4;
 const byte LCD_COLS = 20;
 unsigned long prevMillis = 0;
@@ -159,6 +159,7 @@ bool hasDutyChanges(float data);
 bool hasProgBarChanges(int data);
 void clearRow(byte row);
 void printValue(MenuItem menu);
+void stepMenuValue(const MenuItem &item);
 
 void setup()
 {
@@ -388,9 +389,7 @@ void buttonClickHandler()
     if (rowSelected == (allowToShowRows - 1) && menuItems > allowToShowRows)
     {
       if ((idxFirstRowMenuItem + allowToShowRows) < menuItems)
-      {
         idxFirstRowMenuItem = idxFirstRowMenuItem + 1;
-      }
       else
       {
         idxFirstRowMenuItem = 0;
@@ -406,34 +405,44 @@ void buttonClickHandler()
   }
   if (btn.isStep() && isMenuShowing)
   {
-    switch (rowSelected)
-    {
-    case 0:
-      IS_PID_MODE = !IS_PID_MODE;
-      break;
-    case 1:
-      if (IS_PID_MODE)
-      {
-        CTR_PID_TEMP = (CTR_PID_TEMP + 1) > MAX_CTR_TEMP ? MIN_CTR_TEMP : CTR_PID_TEMP + 1;
-      }
-      else
-        MIN_TEMP_START = (MIN_TEMP_START + 1) < MAX_TEMP_START ? MIN_TEMP_START + 1 : MIN_CTR_TEMP;
-      break;
-    case 2:
-      if (IS_PID_MODE)
-      {
-      }
-      else
-        MAX_TEMP_START = (MAX_TEMP_START + 1 > MAX_CTR_TEMP) ? MIN_TEMP_START + 1 : MAX_TEMP_START + 1;
-      break;
-    case 3:
-      if (IS_PID_MODE)
-      {
-      }
-      else
-        DUTY_HYST = (DUTY_HYST % 10) + 1;
-      break;
-    }
+    byte activeIndex = idxFirstRowMenuItem + rowSelected;
+    if (IS_PID_MODE)
+      stepMenuValue(menuPIDon[activeIndex]);
+    else
+      stepMenuValue(menuPIDoff[activeIndex]);
+
+    // switch (rowSelected)
+    // {
+    // case 0:
+    //   IS_PID_MODE = !IS_PID_MODE;
+    //   break;
+    // case 1:
+    //   if (IS_PID_MODE)
+    //   {
+    //     // CTR_PID_TEMP = (CTR_PID_TEMP + 1) > MAX_CTR_TEMP ? MIN_CTR_TEMP : CTR_PID_TEMP + 1;
+    //     stepMenuValue(menuPIDon[activeIndex]);
+    //   }
+    //   else
+    //     stepMenuValue(menuPIDoff[activeIndex]);
+    //   // MIN_TEMP_START = (MIN_TEMP_START + 1) < MAX_TEMP_START ? MIN_TEMP_START + 1 : MIN_CTR_TEMP;
+    //   break;
+    // case 2:
+    //   if (IS_PID_MODE)
+    //   {
+    //     stepMenuValue(menuPIDon[activeIndex]);
+    //   }
+    //   else
+    //     stepMenuValue(menuPIDoff[activeIndex]);
+    //   // MAX_TEMP_START = (MAX_TEMP_START + 1 > MAX_CTR_TEMP) ? MIN_TEMP_START + 1 : MAX_TEMP_START + 1;
+    //   break;
+    // case 3:
+    //   if (IS_PID_MODE)
+    //   {
+    //   }
+    //   else
+    //     DUTY_HYST = (DUTY_HYST % 10) + 1;
+    //   break;
+    // }
     updateDisplay(true);
   }
 }
@@ -509,4 +518,39 @@ void printValue(MenuItem menu)
   }
   else if (menu.signType == TYPE_PERCENT)
     lcd.print("%");
+}
+
+void stepMenuValue(const MenuItem &item)
+{
+  switch (item.type)
+  {
+  case TYPE_BOOL:
+    *(bool *)item.value = !*(bool *)item.value;
+
+    break;
+  case TYPE_BYTE:
+  {
+    byte *v = (byte *)item.value;
+
+    if (item.value == &MIN_TEMP_START)
+      *v = (*v + 1 < MAX_TEMP_START) ? *v + 1 : MIN_CTR_TEMP;
+    else if (item.value == &MAX_TEMP_START)
+      *v = (*v + 1 > MAX_CTR_TEMP) ? MIN_TEMP_START + 1 : *v + 1;
+    else if (item.value == &DUTY_HYST)
+      *v = (*v % 10) + 1;
+    else
+      (*v)++;
+
+    break;
+  }
+  case TYPE_DOUBLE:
+  {
+    double *v = (double *)item.value;
+    
+    if (item.value == &CTR_PID_TEMP)
+      *v = (*v + 1 > MAX_CTR_TEMP) ? MIN_CTR_TEMP : *v + 1;
+
+    break;
+  }
+  }
 }
