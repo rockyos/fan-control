@@ -6,6 +6,8 @@
 #include <GyverButton.h>
 #include <EEPROM.h>
 #include <PID_v1.h>
+#include <math.h>
+
 #define ARRAY_LEN(x) (sizeof(x) / sizeof((x)[0]))
 
 struct Settings
@@ -15,7 +17,9 @@ struct Settings
   byte startTemp;
   byte endTemp;
   byte dutyHyst;
-  byte lightOn;
+  float Kp;
+  float Ki;
+  float Kd;
 };
 
 enum ValueType
@@ -54,11 +58,13 @@ const int INTERVAL_UPDATES = 1000;
 const int INIT_START_TIME = 7000;
 bool IS_PID_MODE = false;
 double CTR_PID_TEMP = 50;
+double K_P = 2;
+double K_I = 5;
+double K_D = 1;
 byte MIN_TEMP_START = 30;
 byte MAX_TEMP_START = 50;
 const byte MIN_CTR_TEMP = 20;
 const byte MAX_CTR_TEMP = 80;
-bool BACK_LIGHT_ON = true;
 byte DUTY_HYST = 3;
 const word PWM_FREQ_HZ = 25000;                      // 25 kHz of fan PWM frequency
 const word TCNT1_TOP = 16000000 / (2 * PWM_FREQ_HZ); // CPU clock
@@ -80,7 +86,10 @@ Settings cfg;
 
 const MenuItem menuPIDon[] = {
     {"PID enabled: ", &IS_PID_MODE, TYPE_BOOL, TYPE_NONE},
-    {"PID Temp: ", &CTR_PID_TEMP, TYPE_DOUBLE, TYPE_DEGREE}};
+    {"PID Temp: ", &CTR_PID_TEMP, TYPE_DOUBLE, TYPE_DEGREE},
+    {"Kp: ", &K_P, TYPE_DOUBLE, TYPE_NONE},
+    {"Ki: ", &K_I, TYPE_DOUBLE, TYPE_NONE},
+    {"Kd: ", &K_D, TYPE_DOUBLE, TYPE_NONE}};
 
 const MenuItem menuPIDoff[] = {
     {"PID enabled: ", &IS_PID_MODE, TYPE_BOOL, TYPE_NONE},
@@ -93,8 +102,7 @@ const MenuItem mainView[] = {
     {"Fans speed: ", &adjustedDuty, TYPE_BYTE, TYPE_PERCENT}};
 
 double inputPID, outputPID;
-double Kp = 2, Ki = 5, Kd = 1;
-PID fanPID(&inputPID, &outputPID, &CTR_PID_TEMP, Kp, Ki, Kd, DIRECT);
+PID fanPID(&inputPID, &outputPID, &CTR_PID_TEMP, K_P, K_I, K_D, DIRECT);
 
 byte arrowRight[8] = {
     B00000,
@@ -153,13 +161,14 @@ bool isValidTemp();
 void updateDisplay(bool forceUpdate = false);
 void initOrErrorMsgDisplay(bool init);
 void buttonClickHandler();
-byte digitAmount(float data);
+byte digitsAmount(float data);
 bool hasTempChanges(float data);
 bool hasDutyChanges(float data);
 bool hasProgBarChanges(int data);
 void clearRow(byte row);
 void printValue(MenuItem menu);
 void stepMenuValue(const MenuItem &item);
+void saveToEEPROM();
 
 void setup()
 {
@@ -169,7 +178,11 @@ void setup()
   MIN_TEMP_START = cfg.startTemp != 255 ? cfg.startTemp : MIN_TEMP_START; // 255 default unprogrammed EEPROM value
   MAX_TEMP_START = cfg.endTemp != 255 ? cfg.endTemp : MAX_TEMP_START;
   DUTY_HYST = cfg.dutyHyst != 255 ? cfg.dutyHyst : DUTY_HYST;
-  // BACK_LIGHT_ON = cfg.lightOn;
+
+  K_P = !isnan(cfg.Kp) ? cfg.Kp : K_P;
+  K_I = !isnan(cfg.Ki) ? cfg.Ki : K_I;
+  K_D = !isnan(cfg.Kd) ? cfg.Kd : K_D;
+
   pinMode(OC1A_PIN, OUTPUT);
   TCCR1A = 0;
   TCCR1B = 0;
@@ -182,10 +195,10 @@ void setup()
   sensors.setResolution(10);
   fanPID.SetOutputLimits(0, 100);
   fanPID.SetSampleTime(INTERVAL_UPDATES);
+  fanPID.SetTunings(K_P, K_I, K_D);
   fanPID.SetMode(AUTOMATIC); /// check
   lcd.init();
-  if (BACK_LIGHT_ON)
-    lcd.backlight();
+  lcd.backlight();
   const byte *const symbols[] = {arrowRight, arrowUp, arrowDown, vertLine, vertBar};
   for (byte i = 0; i < ARRAY_LEN(symbols); i++)
   {
@@ -261,7 +274,7 @@ bool isValidTemp()
   return true;
 }
 
-void updateDisplay(bool forceUpdate = false)
+void updateDisplay(bool forceUpdate)
 {
   ScreenMode currentScreen = isMenuShowing ? SCREEN_MENU : SCREEN_MAIN;
   static float previousTemp = 0;
@@ -314,7 +327,8 @@ void updateDisplay(bool forceUpdate = false)
   }
   else
   {
-    for (byte i = 0; i < 2; i++)
+    const byte mainShowRowsSize = ARRAY_LEN(mainView);
+    for (byte i = 0; i < mainShowRowsSize; i++)
     {
       if (i == 0)
       {
@@ -329,7 +343,7 @@ void updateDisplay(bool forceUpdate = false)
           lcd.print(" ");
         previousTemp = tempC;
       }
-      else
+      else if (i == 1)
       {
         byte val = *(byte *)mainView[i].value;
         if (hasDutyChanges(val))
@@ -366,14 +380,10 @@ void buttonClickHandler()
   btn.tick();
   if (btn.isDouble())
   {
-    if (isMenuShowing)
-    {
-      cfg.isPIDmode = IS_PID_MODE;
-      cfg.ctrTemp = CTR_PID_TEMP;
-      cfg.startTemp = MIN_TEMP_START;
-      cfg.endTemp = MAX_TEMP_START;
-      cfg.dutyHyst = DUTY_HYST;
-      EEPROM.put(0, cfg);
+    if (isMenuShowing) {
+      saveToEEPROM();
+      if (IS_PID_MODE) 
+        fanPID.SetTunings(K_P, K_I, K_D);
     }
     isMenuShowing = !isMenuShowing;
     updateDisplay(true);
@@ -412,7 +422,7 @@ void buttonClickHandler()
   }
 }
 
-byte digitAmount(float data)
+byte digitsAmount(float data)
 {
   int n = abs(data);
   if (n < 10)
@@ -427,7 +437,7 @@ byte digitAmount(float data)
 bool hasTempChanges(float data)
 {
   static int lastDigits = 1;
-  byte digits = digitAmount(data);
+  byte digits = digitsAmount(data);
   bool changed = (digits != lastDigits);
   lastDigits = digits;
   return changed;
@@ -436,7 +446,7 @@ bool hasTempChanges(float data)
 bool hasDutyChanges(float data)
 {
   static int lastDigits = 1;
-  byte digits = digitAmount(data);
+  byte digits = digitsAmount(data);
   bool changed = (digits != lastDigits);
   lastDigits = digits;
   return changed;
@@ -472,7 +482,7 @@ void printValue(MenuItem menu)
     break;
 
   case TYPE_DOUBLE:
-    lcd.print((int)(*(double *)menu.value));
+    lcd.print(*(double *)menu.value, 1);
     break;
   }
 
@@ -514,8 +524,26 @@ void stepMenuValue(const MenuItem &item)
 
     if (item.value == &CTR_PID_TEMP)
       *v = (*v + 1 > MAX_CTR_TEMP) ? MIN_CTR_TEMP : *v + 1;
-
+    if (item.value == &K_P || item.value == &K_I || item.value == &K_D)
+    {
+      *v += 0.1;
+      if (*v > 10.0)
+        *v = 0.1;
+    }
     break;
   }
   }
+}
+
+void saveToEEPROM()
+{
+  cfg.isPIDmode = IS_PID_MODE;
+  cfg.ctrTemp = CTR_PID_TEMP;
+  cfg.startTemp = MIN_TEMP_START;
+  cfg.endTemp = MAX_TEMP_START;
+  cfg.dutyHyst = DUTY_HYST;
+  cfg.Kp = K_P;
+  cfg.Ki = K_I;     
+  cfg.Kd = K_D;
+  EEPROM.put(0, cfg);
 }
