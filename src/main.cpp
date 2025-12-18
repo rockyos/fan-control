@@ -36,12 +36,19 @@ enum DisplaySignType
   TYPE_PERCENT,
 };
 
+enum DisplayValueType
+{
+  VAL_INT,
+  VAL_FLOAT
+};
+
 struct MenuItem
 {
   const char *label;
   void *value;
   ValueType type;
   DisplaySignType signType;
+  DisplayValueType valueType;
 };
 
 enum ScreenMode
@@ -86,10 +93,10 @@ Settings cfg;
 
 const MenuItem menuPIDon[] = {
     {"PID enabled: ", &IS_PID_MODE, TYPE_BOOL, TYPE_NONE},
-    {"PID Temp: ", &CTR_PID_TEMP, TYPE_DOUBLE, TYPE_DEGREE},
-    {"Kp: ", &K_P, TYPE_DOUBLE, TYPE_NONE},
-    {"Ki: ", &K_I, TYPE_DOUBLE, TYPE_NONE},
-    {"Kd: ", &K_D, TYPE_DOUBLE, TYPE_NONE}};
+    {"PID Temp: ", &CTR_PID_TEMP, TYPE_DOUBLE, TYPE_DEGREE, VAL_INT},
+    {"Kp: ", &K_P, TYPE_DOUBLE, TYPE_NONE, VAL_FLOAT},
+    {"Ki: ", &K_I, TYPE_DOUBLE, TYPE_NONE, VAL_FLOAT},
+    {"Kd: ", &K_D, TYPE_DOUBLE, TYPE_NONE, VAL_FLOAT}};
 
 const MenuItem menuPIDoff[] = {
     {"PID enabled: ", &IS_PID_MODE, TYPE_BOOL, TYPE_NONE},
@@ -98,7 +105,7 @@ const MenuItem menuPIDoff[] = {
     {"Hysteresis: ", &DUTY_HYST, TYPE_BYTE, TYPE_PERCENT}};
 
 const MenuItem mainView[] = {
-    {"Temperature: ", &tempC, TYPE_DOUBLE, TYPE_DEGREE},
+    {"Temperature: ", &tempC, TYPE_DOUBLE, TYPE_DEGREE, VAL_FLOAT},
     {"Fans speed: ", &adjustedDuty, TYPE_BYTE, TYPE_PERCENT}};
 
 double inputPID, outputPID;
@@ -192,7 +199,7 @@ void setup()
   ICR1 = TCNT1_TOP;
   sensors.begin();
   sensors.setWaitForConversion(false);
-  sensors.setResolution(10);
+  sensors.setResolution(11);
   fanPID.SetOutputLimits(0, 100);
   fanPID.SetSampleTime(INTERVAL_UPDATES);
   fanPID.SetTunings(K_P, K_I, K_D);
@@ -482,7 +489,8 @@ void printValue(MenuItem menu)
     break;
 
   case TYPE_DOUBLE:
-    lcd.print(*(double *)menu.value, 1);
+    bool isFloat = menu.valueType == VAL_FLOAT;
+    lcd.print(*(double *)menu.value, isFloat ? 1 : 0);
     break;
   }
 
