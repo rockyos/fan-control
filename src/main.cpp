@@ -7,20 +7,20 @@
 #include <EEPROM.h>
 #include <PID_v1.h>
 #include <math.h>
-
+#define MAGIC_SUM 0xA56A
 #define ARRAY_LEN(x) (sizeof(x) / sizeof((x)[0]))
 
 struct Settings
 {
   uint16_t magic;
   bool isPIDmode;
-  byte ctrTemp;
+  double ctrTemp;
   byte startTemp;
   byte endTemp;
   byte dutyHyst;
-  float Kp;
-  float Ki;
-  float Kd;
+  double Kp;
+  double Ki;
+  double Kd;
 };
 
 enum ValueType
@@ -59,9 +59,9 @@ enum ScreenMode
   SCREEN_INIT
 };
 
-const byte OC1A_PIN = 9;
-const byte SENSOR_PIN = 11;
-const byte BTN_PIN = 2;
+const byte OC1A_PIN = 9; //pin for fan control
+const byte SENSOR_PIN = 11; // pin for temp sensor
+const byte BTN_PIN = 2; // pin for button
 const int INTERVAL_UPDATES = 1000;
 const int INIT_START_TIME = 7000;
 bool IS_PID_MODE = false;
@@ -91,7 +91,6 @@ byte idxFirstRowMenuItem = 0;
 float tempC = 0.0;
 byte adjustedDuty = 0;
 Settings cfg;
-int16_t MAGIC_SUM = 0xA55A;
 
 const MenuItem menuPIDon[] = {
     {"PID enabled: ", &IS_PID_MODE, TYPE_BOOL, TYPE_NONE},
@@ -111,7 +110,7 @@ const MenuItem mainView[] = {
     {"Fans speed: ", &adjustedDuty, TYPE_BYTE, TYPE_PERCENT}};
 
 double inputPID, outputPID;
-PID fanPID(&inputPID, &outputPID, &CTR_PID_TEMP, K_P, K_I, K_D, DIRECT);
+PID fanPID(&inputPID, &outputPID, &CTR_PID_TEMP, K_P, K_I, K_D, REVERSE);
 
 byte arrowRight[8] = {
     B00000,
@@ -507,30 +506,26 @@ void stepMenuValue(const MenuItem &item)
     break;
   case TYPE_BYTE:
   {
-    byte v = *(byte *)item.value;
-
+    byte *v = (byte *)item.value;
     if (item.value == &MIN_TEMP_START)
-      v = (v + 1 < MAX_TEMP_START) ? v + 1 : MIN_CTR_TEMP;
+      *v = (*v + 1 < MAX_TEMP_START) ? *v + 1 : MIN_CTR_TEMP;
     else if (item.value == &MAX_TEMP_START)
-      v = (v + 1 > MAX_CTR_TEMP) ? MIN_TEMP_START + 1 : v + 1;
+      *v = (*v + 1 > MAX_CTR_TEMP) ? MIN_TEMP_START + 1 : *v + 1;
     else if (item.value == &DUTY_HYST)
-      v = (v % 10) + 1;
-    else
-      v++;
-
+      *v = (*v % 10) + 1;
     break;
   }
   case TYPE_FLOAT:
   {
-    float v = *(float *)item.value;
+    float *v = (float *)item.value;
 
     if (item.value == &CTR_PID_TEMP)
-      v = (v + 1 > MAX_CTR_TEMP) ? MIN_CTR_TEMP : v + 1;
+      *v = (*v + 1 > MAX_CTR_TEMP) ? MIN_CTR_TEMP : *v + 1;
     if (item.value == &K_P || item.value == &K_I || item.value == &K_D)
     {
-      v += 0.1;
-      if (v > 10.0)
-        v = 0.1;
+      *v += 0.1;
+      if (*v > 10.0)
+        *v = 0.1;
     }
     break;
   }
